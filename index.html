@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Online V IDE</title>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    #editor { width: 100%; height: 80vh; }
+    #output { height: 20vh; background: #111; color: #0f0; padding: 10px; overflow: auto; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs/loader.min.js"></script>
+</head>
+<body>
+  <div id="editor"></div>
+  <button id="runBtn">Run</button>
+  <pre id="output">(output...)</pre>
+
+  <script>
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.33.0/min/vs' }});
+    require(['vs/editor/editor.main'], function () {
+      window.editor = monaco.editor.create(document.getElementById('editor'), {
+        value: 'fn main() {\n    println("Hello from V!")\n}',
+        language: 'c',
+        theme: 'vs-dark'
+      });
+    });
+
+    const runBtn = document.getElementById('runBtn');
+    const output = document.getElementById('output');
+
+    async function runCode() {
+      output.textContent = 'Running...';
+      const code = window.editor.getValue();
+
+      const res = await fetch('http://localhost:3000/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        output.textContent = 'Error:\n' + data.error;
+
+        const markers = [];
+        const regex = /code\.v:(\d+):(\d+): error: (.+)/g;
+        let match;
+        while ((match = regex.exec(data.error)) !== null) {
+          const line = parseInt(match[1]);
+          const msg = match[3];
+          markers.push({
+            severity: monaco.MarkerSeverity.Error,
+            message: msg,
+            startLineNumber: line,
+            startColumn: 1,
+            endLineNumber: line,
+            endColumn: 100,
+          });
+        }
+        monaco.editor.setModelMarkers(window.editor.getModel(), 'v', markers);
+      } else {
+        output.textContent = data.output || '(no output)';
+        monaco.editor.setModelMarkers(window.editor.getModel(), 'v', []);
+      }
+    }
+
+    runBtn.addEventListener('click', runCode);
+  </script>
+</body>
+</html>
